@@ -1,0 +1,204 @@
+From 238c47ce9ec0fe9b4d6b101ce746b75a6c16803c Mon Sep 17 00:00:00 2001
+From: Joonhoe Kim <26rote@gmail.com>
+Date: Sat, 26 Sep 2026 01:33:48 +0000
+Subject: [PATCH] arm64: configs: add the baldur config fragments
+
+---
+ arch/arm64/configs/baldur-display.fragment |  12 ++
+ arch/arm64/configs/baldur-kexec.fragment   |  21 ++++
+ arch/arm64/configs/baldur.fragment         | 136 +++++++++++++++++++++
+ 3 files changed, 169 insertions(+)
+ create mode 100644 arch/arm64/configs/baldur-display.fragment
+ create mode 100644 arch/arm64/configs/baldur-kexec.fragment
+ create mode 100644 arch/arm64/configs/baldur.fragment
+
+diff --git a/arch/arm64/configs/baldur-display.fragment b/arch/arm64/configs/baldur-display.fragment
+new file mode 100644
+index 000000000..846c28336
+--- /dev/null
++++ b/arch/arm64/configs/baldur-display.fragment
+@@ -0,0 +1,12 @@
++# SPDX-License-Identifier: GPL-2.0-only
++# Stage 5: merge after baldur.fragment. The panel driver has to be
++# built in -- the initramfs carries no modules.
++CONFIG_DRM_PANEL_NOVATEK_NT36523=y
++CONFIG_ARM64_BUILTIN_FDT_NAME="qcom/kaanapali-lenovo-baldur-display.dtb"
++
++# The panel's backlight, an Awinic AW99706 on I2C12.
++CONFIG_BACKLIGHT_AW99706=y
++
++# Touch, Novatek NT36536 (patch 0026). A module:
++# init loads it from the initramfs.
++CONFIG_TOUCHSCREEN_NT36536_SPI=m
+diff --git a/arch/arm64/configs/baldur-kexec.fragment b/arch/arm64/configs/baldur-kexec.fragment
+new file mode 100644
+index 000000000..e8093e543
+--- /dev/null
++++ b/arch/arm64/configs/baldur-kexec.fragment
+@@ -0,0 +1,21 @@
++# SPDX-License-Identifier: GPL-2.0-only
++# The same test kernel, started by kexec from Android instead of by the
++# bootloader. Merge after baldur.fragment.
++#
++# - its own devicetree: the board tree plus the four CMA regions Android may
++#   have lent out (kaanapali-lenovo-baldur-kexec.dts)
++# - download mode off: boot_a still holds Android, so a panic should warm-reset
++#   back into Android (ramoops intact), not into the crash dump mode
++# - baldur.end=reboot: /init restarts in order after its countdown, whatever the
++#   download mode -- an orderly restart is a warm reset (see init)
++# - irqchip.gicv3_nolpi=1: leave the GIC's LPIs alone. Android runs them (the
++#   UFS interrupts are ITS MSIs) and they cannot be switched off, so the
++#   redistributors keep Android's tables; nothing reserves those across kexec
++#   (Linux only does that through EFI), and a new kernel that "reuses" them
++#   writes the default LPI config (0xc2 bytes) over whatever is there now. In
++#   QEMU that was its own kernel text
++# - reboot=warm: ask PSCI for SYSTEM_RESET2 warm. Tried against ramoops' bit
++#   flips, which turned out to be the device's own; harmless, kept
++# - baldur.wait=20: a short countdown for the kexec loop
++CONFIG_ARM64_BUILTIN_FDT_NAME="qcom/kaanapali-lenovo-baldur-kexec.dtb"
++CONFIG_CMDLINE="icc-rpmh.qos_disable=1 icc_rpmh.qos_disable=1 clk_ignore_unused pd_ignore_unused initcall_blacklist=clk_disable_unused,genpd_power_off_unused,regulator_init_complete,of_platform_sync_state_init fw_devlink=off initcall_debug loglevel=8 fbcon=font:TER16x32 panic=10 oops=panic console=tty1 keep_bootcon qcom_scm.download_mode=off baldur.end=reboot irqchip.gicv3_nolpi=1 reboot=warm baldur.wait=20"
+diff --git a/arch/arm64/configs/baldur.fragment b/arch/arm64/configs/baldur.fragment
+new file mode 100644
+index 000000000..cc350eb99
+--- /dev/null
++++ b/arch/arm64/configs/baldur.fragment
+@@ -0,0 +1,136 @@
++# SPDX-License-Identifier: GPL-2.0-only
++# Config fragment for TB323FU ("baldur"), merged on top of
++# arch/arm64/configs/kaanapali-oneplus-infiniti_defconfig.
++#
++# Only the differences that matter for OUR board are here; everything else the
++# OnePlus 15 fragment sets already matches what this board needs
++# (PSTORE_RAM, FB_CORE, FRAMEBUFFER_CONSOLE, ARM64_4K_PAGES, EFI off, UFS,
++# SDHCI, pmic-glink).
++
++# The firmware leaves its watchdog running. Nothing feeds it until this driver
++# probes, and as a module it probes far too late -- the OnePlus fragment has it
++# as =m, and the Nubia port's record is that the device just keeps resetting.
++CONFIG_QCOM_WDT=y
++
++# The panel is our only live console (no UART is wired out on this board), and
++# it is reached through the bootloader's splash buffer. simpledrm is what binds
++# /chosen/framebuffer. FB_CORE and FRAMEBUFFER_CONSOLE are already on, so this
++# single option is the difference between seeing a boot and seeing nothing.
++# (SYSFB_SIMPLEFB is not the one to use: it is for firmware-described
++# framebuffers on x86 and is not selectable here.)
++CONFIG_DRM_SIMPLEDRM=y
++
++# Stage 3 boots off an initramfs, so no block device has to come up first.
++CONFIG_BLK_DEV_INITRD=y
++CONFIG_RD_GZIP=y
++
++# The kernel takes only /memory from the bootloader's devicetree.
++# Needs patch 0021.
++CONFIG_ARM64_BUILTIN_FDT=y
++CONFIG_ARM64_BUILTIN_FDT_NAME="qcom/kaanapali-lenovo-baldur.dtb"
++
++# The cmdline is built in too; vendor_boot's is ignored.
++# qcom_scm.download_mode=full: once SCM has probed, an unclean restart (panic)
++# enters the XBL crash dump mode, whose collector writes the ramoops console to
++# the UFS rawdump partition. That copy survives a later power-off and EDL.
++CONFIG_CMDLINE="icc-rpmh.qos_disable=1 icc_rpmh.qos_disable=1 fw_devlink.sync_state=timeout fbcon=font:TER16x32 panic=10 oops=panic console=tty1 keep_bootcon qcom_scm.download_mode=full baldur.end=hold consoleblank=120 no_console_suspend mem_sleep_default=s2idle"
++CONFIG_CMDLINE_FORCE=y
++
++# Stage 3 userspace is built in too; kernel/initramfs/ in tb323fu-linux shows
++# how to make initramfs.cpio.gz. Adjust the path for the build machine.
++CONFIG_INITRAMFS_SOURCE="/root/initramfs.cpio.gz"
++
++# Turn hangs into panics. The bootloader does not hand over with the watchdog
++# running (no reset in 15 minutes on the first boot), so a kernel that hangs
++# without a panic stays hung with no dump or log. With these, a CPU stuck
++# spinning (soft lockup) or a task in D state for over 60 s (usually a stuck
++# initcall) panics into a dump.
++CONFIG_SOFTLOCKUP_DETECTOR=y
++CONFIG_BOOTPARAM_SOFTLOCKUP_PANIC=1
++CONFIG_DETECT_HUNG_TASK=y
++CONFIG_DEFAULT_HUNG_TASK_TIMEOUT=60
++CONFIG_BOOTPARAM_HUNG_TASK_PANIC=1
++
++# On-screen progress marks. A hang before ramoops registers (nothing reaches
++# rawdump either) leaves only the splash, as on the first boot. The panel runs
++# in video mode, so the DPU rereads the splash buffer every frame and pixels
++# painted there show up without a driver.
++# Needs patch 0022. The values match the board DT's simple-framebuffer.
++CONFIG_BOOT_MARKS=y
++CONFIG_BOOT_MARKS_FB_BASE=0xfc800000
++CONFIG_BOOT_MARKS_FB_STRIDE=7616
++CONFIG_BOOT_MARKS_X=1824
++
++# The panel's console: Terminus 16x32 instead of the 8x16 default -- twice the
++# size each way, 119 columns on the 1904-pixel side. The 8x16 text scrolled by
++# too small to read or photograph (2026-09-24).
++CONFIG_FONTS=y
++CONFIG_FONT_8x16=y
++CONFIG_FONT_TER16x32=y
++
++# MMC's card-init path only speaks pr_debug. init turns it on for the
++# SD host and re-binds the driver to see why no card comes up.
++CONFIG_DYNAMIC_DEBUG=y
++
++# SCMI reaches CPUCP through this mailbox. As a module (the OnePlus
++# fragment's =m) it never loads -- the initramfs carries no modules -- and
++# arm-scmi sits deferred with "failed to setup channel", so no cpufreq, and
++# the CPUs stay wherever the bootloader left them.
++CONFIG_QCOM_CPUCP_MBOX=y
++
++# The OnePlus 15's touch driver (Synaptics S3910) is built in and
++# announces itself at boot; this board's touch is Novatek.
++# CONFIG_TOUCHSCREEN_SYNAPTICS_TCM_ONCELL is not set
++# CONFIG_TOUCHSCREEN_SYNAPTICS_TCM is not set
++# CONFIG_TOUCHSCREEN_SYNAPTICS_TCM_SPI is not set
++
++# Bluetooth built in -- the WCN7860's BT half on uart18 is how we learnt
++# the chip is alive (HCI version read, before any firmware).
++CONFIG_BT=y
++CONFIG_BT_HCIUART=y
++CONFIG_BT_QCA=y
++CONFIG_BT_HCIUART_QCA=y
++
++# The OnePlus fragment names the machine "infiniti".
++CONFIG_DEFAULT_HOSTNAME="baldur"
++# Let a user country hint (wpa_supplicant country=KR, iw reg set) reach
++# the WCN7860 firmware; without these the self-managed phy stays on world 00
++CONFIG_CFG80211_CERTIFICATION_ONUS=y
++CONFIG_ATH_REG_DYNAMIC_USER_REG_HINTS=y
++# Wi-Fi as a module (the OnePlus fragment builds it in). Built in, ath12k probes
++# from the initramfs; a release initramfs carries no firmware, the probe fails
++# for good and nothing retries it. As a module, udev loads it from the root,
++# where the firmware is. cfg80211, mac80211, MHI and QRTR stay built in.
++CONFIG_ATH12K=m
++# The CPU bandwidth monitors (qcom,kaanapali-cpu-bwmon, sdm845 flow)
++# scale DDR with CPU traffic; built in, since no modules reach the rootfs.
++# Without a driver they also held two interconnects' sync_state (fw_devlink).
++CONFIG_QCOM_ICC_BWMON=y
++# The LPASS LPI pin controller (kaanapali.dtsi: sm8750 with the sm8650
++# fallback) -- the RX/TX SoundWire masters to the WCD9395 wait for its pins.
++CONFIG_PINCTRL_SM8650_LPASS_LPI=m
++# ALSA sequencer (MIDI). Fedora's dist-alsa.conf loads snd-seq right after snd-pcm
++# ("install snd-pcm ... && modprobe snd-seq"); without it that modprobe fails and
++# the sound card never appears. Modules only.
++CONFIG_SND_SEQUENCER=m
++# /sys/power/pm_test, pm_print_times, pm_debug_messages -- without these
++# a "pm_test" write silently fails and "echo freeze > state" really suspends.
++CONFIG_PM_DEBUG=y
++CONFIG_PM_SLEEP_DEBUG=y
++# A device suspend/resume callback that does not return within 15 s
++# panics with its name and stack (into pstore -> rawdump via 900E).
++CONFIG_DPM_WATCHDOG=y
++CONFIG_DPM_WATCHDOG_TIMEOUT=15
++CONFIG_DPM_WATCHDOG_WARNING_TIMEOUT=15
++# PMIC5 Gen4 ADC + ADC_TM: board thermistors, PMIC die temps (0039)
++CONFIG_QCOM_SPMI_ADC5_GEN3=y
++CONFIG_QCOM_SPMI_ADC_TM5_GEN3=y
++# kaanapali CAMSS (RDI) + CSI2 PHY + sensors (0013-0016, 0040-0045)
++CONFIG_PHY_QCOM_MIPI_CSI2=m
++CONFIG_VIDEO_S5KJN5=m
++CONFIG_VIDEO_S5KJNS=m
++CONFIG_VIDEO_GC08A3=m
++CONFIG_VIDEO_GC08A8=m
++CONFIG_VIDEO_DW9719=m
++CONFIG_LEDS_AW22127=m
++CONFIG_LEDS_TRIGGER_PATTERN=y
+-- 
+2.43.0
+

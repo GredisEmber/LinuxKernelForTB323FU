@@ -1,0 +1,38 @@
+tb323fu t65 personal kernel
+===========================
+
+Release:        7.3.0-tb323fu-t65-personal #2 SMP PREEMPT
+Built:          2026-11-25 16:41:57 CST
+Base:           Linux v7.3 (c03c1a14507dfaf8b856c2608f9ac216021fc222)
+Upstream:       tb323fu-linux tag kernel-t65
+                (38f6c9adff49f6a1947142657af013c1090f9a9c)
+Upstream series: 210 patches numbered 0001-0223
+Local patches:  0001-dpu-dsi-bringup.patch
+                0002-worktree-gmu-iris.patch
+Toolchain:      clang/LLD 23.1.4
+Config:         config/config-tb323fu-t65-personal
+Modules:        829 in-tree + snd-soc-aw882xx in extra/ = 830
+Initramfs:      embedded; includes shared modules squashfs
+
+Verified on TB323FU:
+  - confirmed good with tb323fu-ctl kernel keep
+  - boot reaches the installed userspace
+  - display works and the earlier corruption did not recur
+  - video playback works
+  - both AW882xx amplifiers report start success
+
+Artifact:
+  Image-tb323fu-t65-personal.gz
+  sha256 b2cf2d84f1779116032511386187739982b6b4d697b985ddf346f45a94db2a04
+
+Install on the tablet:
+  tb323fu-ctl kernel inspect Image-tb323fu-t65-personal.gz
+  sudo tb323fu-ctl kernel keep
+  sudo tb323fu-ctl kernel install-local Image-tb323fu-t65-personal.gz \
+    --trial --name t65-personal
+
+After the first successful boot:
+  sudo tb323fu-ctl kernel keep
+
+Rollback:
+  sudo tb323fu-ctl kernel rollback --reboot

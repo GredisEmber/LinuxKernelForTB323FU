@@ -1,0 +1,11 @@
+/work/
+/dist/
+*.o
+*.ko
+*.mod
+*.mod.c
+*.cmd
+*.tmp
+*.log
+.cache/
+__pycache__/

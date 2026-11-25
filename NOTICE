@@ -1,0 +1,71 @@
+LinuxKernelForTB323FU
+Copyright (C) 2026 GredisEmber and contributors
+
+Personal build metadata and prebuilt kernel for the Lenovo Legion Tab Gen 5 /
+Legion Y700 5th Gen (TB323FU). This is an independent community build, not an
+official release of tb323fu-linux and not affiliated with Lenovo, Qualcomm or
+Valve. Those names identify the device and software only.
+
+
+Upstream project
+----------------
+
+tb323fu-linux
+Copyright (C) 2026 Joonhoe Kim and contributors
+https://github.com/joonhoekim/tb323fu-linux
+
+The kernel patch series, board configuration, initramfs init, gpu-probe and
+aw882xx integration originate there. The imported version is tag kernel-t65,
+commit 38f6c9adff49f6a1947142657af013c1090f9a9c. Imported patches retain
+their original authors, copyright lines and Signed-off-by trailers.
+
+
+License map
+-----------
+
+  Path / component                                   License
+  -------------------------------------------------  -------------------------
+  project-authored scripts, Makefile, README and     MIT
+    documentation
+  patches/upstream/                                  GPL-2.0-only, with each
+                                                     patch's original notices
+  patches/local/, config/                            GPL-2.0-only
+  drivers/aw882xx/                                   GPL-2.0-only (the vendor
+                                                     headers use the older
+                                                     GPL-2.0 identifier)
+  initramfs/init, initramfs/helpers/                 MIT
+  initramfs/gpu-probe.c                              GPL-2.0-only
+  initramfs/third_party/busybox                      GPL-2.0
+  initramfs/third_party/regulatory.db*               ISC (wireless-regdb)
+  initramfs/third_party/font.psf                     console-setup/Terminus;
+                                                     see third_party/README.md
+  prebuilt/Image-tb323fu-t65-personal.gz             aggregate binary containing
+                                                     the components above
+
+The full GPL-2.0-only text is in LICENSES/GPL-2.0-only.txt. The root LICENSE is
+the MIT grant for this repository's original material and does not relicense
+GPL files.
+
+
+Third-party code and data
+-------------------------
+
+- Linux kernel: Copyright Linus Torvalds and kernel contributors, GPL-2.0-only.
+- AWINIC aw882xx: Copyright (c) 2020 AWINIC Technology Co., Ltd. The driver was
+  obtained through tb323fu-linux; its README records the original upstream.
+- BusyBox: Copyright the BusyBox authors, GPL-2.0. The bundled static binary is
+  Debian package 1:1.35.0-4+deb12u1+b1.
+- wireless-regdb: Copyright the wireless-regdb contributors, ISC.
+- Console font: from console-setup's Terminus set, supplied by the tested build
+  environment.
+- gpu-probe: Joonhoe Kim and contributors, GPL-2.0-only.
+
+
+Source availability
+-------------------
+
+SOURCE.md gives the exact Linux base commit and tarball checksum, patch order,
+local modifications and build environment. BUILD.md and scripts/build.sh
+describe and automate reconstruction of the corresponding kernel source and
+Image. Imported helpers without source in this checkout are identified by their
+upstream repository path and commit.

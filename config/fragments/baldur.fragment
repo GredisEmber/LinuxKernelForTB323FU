@@ -1,0 +1,167 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Config fragment for the Lenovo Y700 Gen 5 (TB323FU, "baldur"), merged on top
+# of arch/arm64/configs/kaanapali-oneplus-infiniti_defconfig.
+#
+# Only the differences this board needs are here. The OnePlus 15 fragment
+# already sets the rest (PSTORE_RAM, FB_CORE, FRAMEBUFFER_CONSOLE,
+# ARM64_4K_PAGES, EFI off, UFS, SDHCI, pmic_glink).
+
+# The firmware leaves its watchdog running and nothing feeds it until this
+# driver probes. As a module (=m in the OnePlus fragment) it probes too late
+# and the device keeps resetting.
+CONFIG_QCOM_WDT=y
+
+# The panel is the only console (no UART is wired out). It starts on the
+# bootloader's splash buffer, which simpledrm binds through
+# /chosen/framebuffer.
+CONFIG_DRM_SIMPLEDRM=y
+
+# The kernel boots from its built-in initramfs, before any block device.
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_RD_GZIP=y
+
+# Built-in device tree: the bootloader only passes /memory. Needs patch 0021.
+CONFIG_ARM64_BUILTIN_FDT=y
+CONFIG_ARM64_BUILTIN_FDT_NAME="qcom/kaanapali-lenovo-baldur.dtb"
+
+# Built-in command line; the one in vendor_boot is ignored. Each option is
+# explained in kernel/README.md. qcom_scm.download_mode=full: once SCM has
+# probed, a panic goes to the Qualcomm crash dump mode, and the dump collector
+# writes the ramoops console to the UFS rawdump partition, where it survives a
+# power cycle and EDL.
+CONFIG_CMDLINE="icc-rpmh.qos_disable=1 icc_rpmh.qos_disable=1 fw_devlink.sync_state=timeout fbcon=font:TER16x32 panic=10 oops=panic console=tty1 keep_bootcon qcom_scm.download_mode=full baldur.end=hold consoleblank=120 mem_sleep_default=s2idle cpuidle_psci_domain.allow_cluster_off=0"
+CONFIG_CMDLINE_FORCE=y
+
+# The initramfs is built into the kernel. Set this to your own
+# initramfs.cpio.gz (how to build it: kernel/initramfs/).
+CONFIG_INITRAMFS_SOURCE=""
+
+# A CPU stuck in a loop (soft lockup) panics and leaves a dump: the bootloader
+# does not leave a watchdog armed, so a hung kernel would stay hung with no log.
+# A task in D state for over 60 s is only reported. A USB disk that disappears
+# under I/O leaves tasks in D state, and that must not reboot the tablet.
+CONFIG_SOFTLOCKUP_DETECTOR=y
+CONFIG_BOOTPARAM_SOFTLOCKUP_PANIC=1
+CONFIG_DETECT_HUNG_TASK=y
+CONFIG_DEFAULT_HUNG_TASK_TIMEOUT=60
+CONFIG_BOOTPARAM_HUNG_TASK_PANIC=0
+
+# Boot progress marks drawn into the splash buffer, for hangs before ramoops
+# is registered. The panel runs in video mode, so the display reads that buffer
+# every frame and the marks show without a driver. Needs patch 0022; the values
+# match the simple-framebuffer node of the board DT.
+CONFIG_BOOT_MARKS=y
+CONFIG_BOOT_MARKS_FB_BASE=0xfc800000
+CONFIG_BOOT_MARKS_FB_STRIDE=7616
+CONFIG_BOOT_MARKS_X=1824
+
+# Console font: Terminus 16x32, twice the 8x16 default each way (119 columns
+# on the 1904-pixel side). 8x16 is too small to read on this panel.
+CONFIG_FONTS=y
+CONFIG_FONT_8x16=y
+CONFIG_FONT_TER16x32=y
+
+# The MMC card-init path only logs with pr_debug. The initramfs turns it on
+# for the SD host when no card comes up.
+CONFIG_DYNAMIC_DEBUG=y
+
+# SCMI reaches CPUCP through this mailbox. As a module (=m in the OnePlus
+# fragment) it never loads, since the initramfs has no modules, so arm-scmi
+# stays deferred and there is no cpufreq.
+CONFIG_QCOM_CPUCP_MBOX=y
+
+# The OnePlus 15's touch controller (Synaptics S3910); this board uses Novatek.
+# CONFIG_TOUCHSCREEN_SYNAPTICS_TCM_ONCELL is not set
+# CONFIG_TOUCHSCREEN_SYNAPTICS_TCM is not set
+# CONFIG_TOUCHSCREEN_SYNAPTICS_TCM_SPI is not set
+
+# Bluetooth (the WCN7860's BT part on uart18) built in.
+CONFIG_BT=y
+CONFIG_BT_HCIUART=y
+CONFIG_BT_QCA=y
+CONFIG_BT_HCIUART_QCA=y
+
+# The OnePlus fragment names the machine "infiniti".
+CONFIG_DEFAULT_HOSTNAME="baldur"
+
+# Let a user country hint (wpa_supplicant country=KR, iw reg set) reach the
+# WCN7860 firmware. Without these the self-managed phy stays on world (00).
+CONFIG_CFG80211_CERTIFICATION_ONUS=y
+CONFIG_ATH_REG_DYNAMIC_USER_REG_HINTS=y
+
+# Wi-Fi as a module (the OnePlus fragment builds it in). Built in, ath12k
+# probes from the initramfs, which has no firmware in release images; the probe
+# fails and nothing retries it. As a module, udev loads it from the root, where
+# the firmware is. cfg80211, mac80211, MHI and QRTR stay built in.
+CONFIG_ATH12K=m
+
+# CPU bandwidth monitors: scale DDR with CPU traffic. Without a driver they
+# also hold the sync_state of two interconnects.
+CONFIG_QCOM_ICC_BWMON=y
+
+# LPASS LPI pin controller (sm8750 with the sm8650 fallback). The SoundWire
+# masters to the WCD9395 codec wait for its pins.
+CONFIG_PINCTRL_SM8650_LPASS_LPI=m
+
+# ALSA sequencer. Fedora loads snd-seq right after snd-pcm; without it that
+# modprobe fails and the sound card never appears.
+CONFIG_SND_SEQUENCER=m
+
+# The PMIC RTC counts from 1970; the firmware keeps the offset to real time.
+# CONFIG_RTC_HCTOSYS is not set
+
+# /sys/power/pm_test, pm_print_times and pm_debug_messages.
+CONFIG_PM_DEBUG=y
+CONFIG_PM_SLEEP_DEBUG=y
+
+# A device suspend or resume callback that does not return within 15 s panics
+# with its name and stack.
+CONFIG_DPM_WATCHDOG=y
+CONFIG_DPM_WATCHDOG_TIMEOUT=15
+CONFIG_DPM_WATCHDOG_WARNING_TIMEOUT=15
+
+# PMIC5 Gen4 ADC and ADC_TM: board thermistors, PMIC die temperatures (0039).
+CONFIG_QCOM_SPMI_ADC5_GEN3=y
+CONFIG_QCOM_SPMI_ADC_TM5_GEN3=y
+
+# Cameras: CSI2 PHY and sensors (0013-0016, 0040-0045), focus motor, and the
+# LED ring.
+CONFIG_PHY_QCOM_MIPI_CSI2=m
+CONFIG_VIDEO_S5KJN5=m
+CONFIG_VIDEO_S5KJNS=m
+CONFIG_VIDEO_GC08A3=m
+CONFIG_VIDEO_GC08A8=m
+CONFIG_VIDEO_DW9719=m
+CONFIG_LEDS_AW22127=m
+CONFIG_LEDS_TRIGGER_PATTERN=y
+
+# tracefs, with no tracer running. SteamOS's steamos-manager mounts it, and
+# Steam's desktop and Gaming Mode switches wait for that daemon.
+CONFIG_FTRACE=y
+CONFIG_ENABLE_DEFAULT_TRACERS=y
+
+# zstd squashfs images (the x86-64 runtime for FEX, many AppImages).
+CONFIG_SQUASHFS_ZSTD=y
+
+# memlat in the CPUCP firmware scales DDR, LLCC and DDR_QOS for latency-bound
+# CPU work (patches 0120-0127). Without it DDR stays low and memory latency
+# doubles.
+CONFIG_QCOM_SCMI_GENERIC_EXT=y
+CONFIG_SCMI_QCOM_MEMLAT_DEVFREQ=y
+CONFIG_DEVFREQ_GOV_REMOTE=y
+
+# DEBUG_KERNEL enables this by default. It hands importers sg tables without
+# pages or lengths, and msm maps imported dma-bufs from those, so every buffer
+# the GPU imports (camera, video decoder, dma-heap) maps to nothing.
+# CONFIG_DMABUF_DEBUG is not set
+
+# libcamera takes the global CMA area (dma-heap "reserved") first when it can;
+# 1080p buffers for the rear camera do not fit in the 32 MB default.
+CONFIG_CMA_SIZE_MBYTES=256
+
+# A 4 MB printk ring, so a crash dump or a long boot keeps its log.
+CONFIG_LOG_BUF_SHIFT=22
+
+# The Qualcomm dwc3 glue depends on TYPEC || TYPEC=n. defconfig has TYPEC=m,
+# which makes it a module before this fragment sets TYPEC=y.
+CONFIG_USB_DWC3_QCOM=y

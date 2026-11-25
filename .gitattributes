@@ -1,0 +1,6 @@
+prebuilt/*.gz binary
+initramfs/helpers/keyhold binary
+initramfs/third_party/busybox binary
+initramfs/third_party/font.psf binary
+*.patch text eol=lf
+*.sh text eol=lf

@@ -1,0 +1,108 @@
+commit cd362f6a3989655aaca3e61d9a8c301c13ded812
+Author:     tb323fu <root@tb323fu-arch>
+AuthorDate: Thu Nov 12 22:46:28 2026 +0800
+Commit:     tb323fu <root@tb323fu-arch>
+CommitDate: Thu Nov 12 22:46:28 2026 +0800
+
+    tb323fu: DPU/DSI bring-up experiments (C1-C3, 0048b PLL SYSTEM_MUXES)
+
+diff --git a/drivers/gpu/drm/drm_atomic_helper.c b/drivers/gpu/drm/drm_atomic_helper.c
+index 285aac355..96a4109c6 100644
+--- a/drivers/gpu/drm/drm_atomic_helper.c
++++ b/drivers/gpu/drm/drm_atomic_helper.c
+@@ -2605,11 +2605,18 @@ int drm_atomic_helper_setup_commit(struct drm_atomic_commit *state,
+ 		 */
+ 		if (nonblock && old_plane_state->commit &&
+ 		    !try_wait_for_completion(&old_plane_state->commit->flip_done)) {
++			/*
++			 * TBEXP-C6: wlroots compositors pass NONBLOCK on every
++			 * commit and treat -EBUSY as fatal, wedging the display
++			 * for good.  Wait for the previous commit instead --
++			 * exactly the blocking semantics Weston uses, and the
++			 * only thing that works on this DPU.
++			 */
+ 			drm_dbg_atomic(plane->dev,
+-				       "[PLANE:%d:%s] busy with a previous commit\n",
++				       "[PLANE:%d:%s] waiting for a previous commit\n",
+ 				       plane->base.id, plane->name);
+ 
+-			return -EBUSY;
++			drm_crtc_commit_wait(old_plane_state->commit);
+ 		}
+ 
+ 		/* Always track planes explicitly for async pageflip support. */
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c
+index 1206b8d81..2c226b501 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c
+@@ -3247,9 +3247,17 @@ static int dpu_encoder_setup_display(struct dpu_encoder_virt *dpu_enc,
+ 
+ 	DPU_DEBUG("dsi_info->num_of_h_tiles %d\n", disp_info->num_of_h_tiles);
+ 
++	/*
++	 * TBEXP-C5: never let the DPU enter RC IDLE on DSI.
++	 *
++	 * RC IDLE disables the INTF interrupts, the vblank stops, and the
++	 * flip_done of the pending commit never completes.  Any following
++	 * nonblocking atomic commit then fails with -EBUSY in
++	 * drm_atomic_helper_setup_commit(), which is fatal for wlroots
++	 * compositors (they don't do blocking commits).
++	 */
+ 	if (disp_info->intf_type != INTF_WB)
+-		dpu_enc->idle_pc_supported =
+-				dpu_kms->catalog->caps->has_idle_pc;
++		dpu_enc->idle_pc_supported = false;
+ 
+ 	mutex_lock(&dpu_enc->enc_lock);
+ 	for (i = 0; i < disp_info->num_of_h_tiles && !ret; i++) {
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_plane.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_plane.c
+index 7b92082d3..8a88ed250 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_plane.c
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_plane.c
+@@ -1781,7 +1781,8 @@ static bool dpu_plane_format_mod_supported(struct drm_plane *plane,
+ 		uint32_t format, uint64_t modifier)
+ {
+ 	struct dpu_kms *dpu_kms = _dpu_plane_get_kms(plane);
+-	bool has_no_ubwc = (dpu_kms->mdss->ubwc_enc_version == 0);
++	/* TBEXP-D1: force linear, do not advertise UBWC to userspace */
++	bool has_no_ubwc = true;
+ 
+ 	if (modifier == DRM_FORMAT_MOD_LINEAR)
+ 		return true;
+diff --git a/drivers/gpu/drm/msm/dsi/phy/dsi_phy.c b/drivers/gpu/drm/msm/dsi/phy/dsi_phy.c
+index 9619f77c5..0e42c6f7f 100644
+--- a/drivers/gpu/drm/msm/dsi/phy/dsi_phy.c
++++ b/drivers/gpu/drm/msm/dsi/phy/dsi_phy.c
+@@ -460,7 +460,9 @@ int msm_dsi_dphy_timing_calc_v4(struct msm_dsi_dphy_timing *timing,
+ 
+ 	timing->shared_timings.byte_intf_clk_div_2 = true;
+ 
+-	DBG("%d, %d, %d, %d, %d, %d, %d, %d, %d, %d",
++	/* TBEXP-C2-final: hs_rqst=11 (vendor value), only change kept */
++	timing->hs_rqst = 11;
++	pr_info("TBEXP-C2F clk_pre=%d clk_post=%d clk_zero=%d clk_trail=%d clk_prepare=%d hs_exit=%d hs_zero=%d hs_prepare=%d hs_trail=%d hs_rqst=%d",
+ 		timing->shared_timings.clk_pre, timing->shared_timings.clk_post,
+ 		timing->clk_zero, timing->clk_trail, timing->clk_prepare, timing->hs_exit,
+ 		timing->hs_zero, timing->hs_prepare, timing->hs_trail, timing->hs_rqst);
+diff --git a/drivers/gpu/drm/msm/dsi/phy/dsi_phy_7nm.c b/drivers/gpu/drm/msm/dsi/phy/dsi_phy_7nm.c
+index 8a88db6d0..f7cfa5b32 100644
+--- a/drivers/gpu/drm/msm/dsi/phy/dsi_phy_7nm.c
++++ b/drivers/gpu/drm/msm/dsi/phy/dsi_phy_7nm.c
+@@ -1000,7 +1000,6 @@ static int dsi_7nm_phy_enable(struct msm_dsi_phy *phy,
+ 			      "%s: PHY timing calculation failed\n", __func__);
+ 		return -EINVAL;
+ 	}
+-
+ 	if (dsi_phy_hw_v4_0_is_pll_on(phy))
+ 		pr_warn("PLL turned on before configuring PHY\n");
+ 
+@@ -1110,7 +1109,9 @@ static int dsi_7nm_phy_enable(struct msm_dsi_phy *phy,
+ 	data = DSI_7nm_PHY_CMN_CTRL_0_DIGTOP_PWRDN_B |
+ 	       DSI_7nm_PHY_CMN_CTRL_0_PLL_SHUTDOWNB;
+ 	writel(data, base + REG_DSI_7nm_PHY_CMN_CTRL_0);
++	writel(0xc0, pll->phy->pll_base + REG_DSI_7nm_PHY_PLL_SYSTEM_MUXES);
+ 	spin_unlock_irqrestore(&pll->pll_enable_lock, flags);
++	ndelay(250);
+ 
+ 	/* Assert PLL core reset */
+ 	writel(0x00, base + REG_DSI_7nm_PHY_CMN_PLL_CNTRL);
